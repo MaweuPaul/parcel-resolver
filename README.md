@@ -12,7 +12,7 @@ neighbors.
 ## The problem
 
 Land parcels are polygons. Sometimes two neighboring parcels' boundaries
-overlap on paper — from survey errors, improper subdivision, duplicate
+overlap on paper , from survey errors, improper subdivision, duplicate
 registration, or a genuine dispute over where the line actually is.
 Today, this is usually only caught manually, often after it's already
 escalated into a legal dispute.
