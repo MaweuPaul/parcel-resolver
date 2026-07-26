@@ -1,14 +1,11 @@
-# Beacon
+# parcel-resolver
 
 **Automated boundary overlap detection for land parcels.**
 
-Beacon takes a set of surveyed land parcel boundaries and automatically
+parcel-resolver takes a set of surveyed land parcel boundaries and automatically
 flags which ones overlap with each other — so a human only has to review
 the flagged cases instead of manually checking every parcel against its
 neighbors.
-
-Named after survey beacons: the physical markers placed at parcel corners
-to fix a boundary in the ground.
 
 ---
 
@@ -28,7 +25,7 @@ This is a well-documented, recurring problem — not a hypothetical one:
   its neighbor smaller than recorded, with a disputed strip between them.
 - Boundaries shifting over time due to encroachment.
 
-Beacon doesn't resolve disputes — it finds and ranks them by severity,
+parcel-resolver doesn't resolve disputes — it finds and ranks them by severity,
 and hands a clean, prioritized list to a human reviewer (surveyor, land
 office, legal team).
 
