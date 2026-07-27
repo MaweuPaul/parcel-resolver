@@ -2,7 +2,7 @@
 
 **Automated boundary overlap detection for land parcels.**
 
-parcel-resolver takes a set of surveyed land parcel boundaries and automatically
+Parcel-resolver takes a set of surveyed land parcel boundaries and automatically
 flags which ones overlap with each other — so a human only has to review
 the flagged cases instead of manually checking every parcel against its
 neighbors.
