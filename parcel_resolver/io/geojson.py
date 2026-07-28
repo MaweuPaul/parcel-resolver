@@ -1,3 +1,4 @@
+from parcel_resolver.resolver.index import find_overlaps
 
 def extract_coordinates(feature: dict) -> list[tuple[float, float]]:
     """
@@ -38,28 +39,47 @@ def parse_feature_collection(feature_collection:dict) -> dict[str, list[tuple[fl
 
 # testing data
 
-# if __name__ == "__main__":
-#     sample_collection = {
-#         "type": "FeatureCollection",
-#         "features": [
-#             {
-#                 "type": "Feature",
-#                 "properties": {"parcelid": "P001"},
-#                 "geometry": {
-#                     "type": "Polygon",
-#                     "coordinates": [
-#                         [
-#                             [0, 0],
-#                             [10, 0],
-#                             [10, 10],
-#                             [0, 10],
-#                             [0, 0],
-#                         ]
-#                     ],
-#                 },
-#             }
-#         ],
-#     }
+if __name__ == "__main__":
+    sample_collection = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"parcelid": "P001"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [0, 0],
+                            [10, 0],
+                            [10, 10],
+                            [0, 10],
+                            [0, 0],
+                        ]
+                    ],
+                },
+            },
+            {
+                            "type": "Feature",
+                            "properties": {"parcelid": "P002"},
+                            "geometry": {
+                                "type": "Polygon",
+                                "coordinates": [
+                                    [
+                                         [10, 0],
+    [20, 0],
+    [20, 10],
+    [10, 10],
+    [10, 0],
+                                    ]
+                                ],
+                            },
+                }
+        ],
+    }
 
-#     result = parse_feature_collection(sample_collection)
-#     print(result)
+    parcels = parse_feature_collection(sample_collection)
+
+    overlaps = find_overlaps(parcels)
+    print("Overlaps:", overlaps)
+    print(parcels)

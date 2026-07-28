@@ -26,6 +26,10 @@ that needs attention so a surveyor, land office, or legal team can review it.
   overlap
 - Candidate lookup with Shapely's `STRtree` spatial index
 - Filtering of invalid parcels before overlap analysis
+- GeoJSON Polygon coordinate extraction
+- GeoJSON FeatureCollection parsing into parcel dictionaries keyed by
+  `properties.parcelid`
+- Data-driven overlap discovery that accepts any parcel dictionary
 - Sample parcel fixtures and automated tests for validation, adjacency,
   overlap detection, and indexed lookup
 
@@ -35,7 +39,10 @@ in the square units of the input coordinate system.
 ## Current flow
 
 ```text
-Parcel coordinates
+GeoJSON FeatureCollection
+       |
+       v
+Parcel dictionary
        |
        v
 Cadastre validation
@@ -52,8 +59,10 @@ Exact intersection check
 (parcel A, parcel B, overlap area)
 ```
 
-The current indexed resolver uses the hardcoded parcels in
-`tests/fixtures/sample_parcels.py` as its input dataset.
+The resolver accepts dictionaries shaped like
+`{"P001": [(x, y), ...], ...}`. The GeoJSON parser creates this structure from
+a FeatureCollection, while the test suite uses the same structure through its
+sample parcel fixture.
 
 ## Project structure
 
@@ -61,6 +70,8 @@ The current indexed resolver uses the hardcoded parcels in
 parcel_resolver/
   cadastre/
     __init__.py       # parcel geometry and area validation
+  io/
+    geojson.py        # GeoJSON Polygon and FeatureCollection parsing
   resolver/
     overlap.py        # exact two-parcel overlap check
     index.py          # validation, spatial indexing, and overlap discovery
@@ -116,13 +127,47 @@ result = validate_parcel(parcel_a)
 # {"is_valid": True, "area": 100.0, "flags": []}
 ```
 
-Run indexed overlap discovery against the current sample dataset:
+Parse a GeoJSON FeatureCollection and run indexed overlap discovery:
 
 ```python
+from parcel_resolver.io.geojson import parse_feature_collection
 from parcel_resolver.resolver.index import find_overlaps
 
-overlaps = find_overlaps()
+feature_collection = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {"parcelid": "P001"},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]
+                ],
+            },
+        },
+        {
+            "type": "Feature",
+            "properties": {"parcelid": "P002"},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [[8, 8], [18, 8], [18, 18], [8, 18], [8, 8]]
+                ],
+            },
+        },
+    ],
+}
+
+parcels = parse_feature_collection(feature_collection)
+overlaps = find_overlaps(parcels)
 # list of (first_parcel_id, second_parcel_id, overlap_area) tuples
+```
+
+Run the temporary end-to-end example currently included in `geojson.py`:
+
+```bash
+python -m parcel_resolver.io.geojson
 ```
 
 ## Status and roadmap
@@ -134,9 +179,11 @@ This is an early-stage prototype; there is no stable release yet.
 - [x] Spatial-index candidate lookup
 - [x] Invalid-parcel filtering
 - [x] Automated tests with known parcel cases
+- [x] In-memory GeoJSON FeatureCollection parsing
+- [x] Resolver input decoupled from test fixtures
 - [ ] Configurable overlap severity thresholds
-- [ ] Loading real parcel datasets instead of test fixtures
-- [ ] GeoJSON and Shapefile input/output
+- [ ] Reading GeoJSON directly from files
+- [ ] Shapefile input/output
 - [ ] Persistent spatial storage
 - [ ] Command-line batch processing
 - [ ] Benchmarks on larger datasets
@@ -144,7 +191,12 @@ This is an early-stage prototype; there is no stable release yet.
 
 ## Limitations
 
-- The indexed workflow is currently coupled to the sample test fixture.
+- GeoJSON support currently accepts an in-memory dictionary; it does not yet
+  read a `.geojson` file from disk.
+- Only Polygon features and their outer coordinate rings are handled;
+  MultiPolygon geometries and interior holes are not yet supported.
+- GeoJSON features must store their parcel identifier in
+  `properties.parcelid`.
 - Input coordinates are assumed to use an appropriate projected coordinate
   system; geographic latitude/longitude needs projection before meaningful
   area calculations.
