@@ -30,6 +30,8 @@ that needs attention so a surveyor, land office, or legal team can review it.
 - GeoJSON FeatureCollection parsing into parcel dictionaries keyed by
   `properties.parcelid`
 - Data-driven overlap discovery that accepts any parcel dictionary
+- Percentage-based overlap severity classification relative to the smaller
+  parcel
 - FastAPI `POST /resolve` endpoint for frontend integration
 - Structured JSON overlap responses and HTTP 400 errors for malformed input
 - Sample parcel fixtures and automated tests for validation, adjacency,
@@ -61,7 +63,10 @@ STRtree candidate search
 Exact intersection check
        |
        v
-(parcel A, parcel B, overlap area)
+Severity classification
+       |
+       v
+(parcel A, parcel B, overlap area, percentage, severity)
 ```
 
 The resolver accepts dictionaries shaped like
@@ -82,6 +87,7 @@ parcel_resolver/
   resolver/
     overlap.py        # exact two-parcel overlap check
     index.py          # validation, spatial indexing, and overlap discovery
+    severity.py       # percentage-based overlap severity classification
 tests/
   fixtures/
     sample_parcels.py # representative sample polygons
@@ -89,6 +95,7 @@ tests/
   test_api.py
   test_index.py
   test_resolver.py
+  test_severity.py
 ```
 
 ## Getting started
@@ -213,11 +220,26 @@ response uses named fields that are easy for a frontend to consume:
     {
       "parcel_a": "P001",
       "parcel_b": "P002",
-      "overlap_area": 4.0
+      "overlap_area": 4.0,
+      "overlap_percentage": 4.0,
+      "severity": "medium"
     }
   ]
 }
 ```
+
+Severity is based on how much of the smaller parcel is covered:
+
+```text
+overlap percentage = overlap area / smaller parcel area × 100
+```
+
+- Below 1%: `low`
+- 1% through 10%: `medium`
+- Above 10%: `high`
+
+For example, an overlap area of `4` between two parcels whose smaller area is
+`100` covers 4% of that parcel and is classified as `medium`.
 
 Malformed GeoJSON returns HTTP `400`:
 
@@ -240,6 +262,7 @@ This is an early-stage prototype; there is no stable release yet.
 - [x] Resolver input decoupled from test fixtures
 - [x] Frontend-facing overlap API
 - [x] API success and error-response tests
+- [x] Percentage-based severity classification
 - [ ] Configurable overlap severity thresholds
 - [ ] Reading GeoJSON directly from files
 - [ ] Shapefile input/output
@@ -262,7 +285,7 @@ This is an early-stage prototype; there is no stable release yet.
 - Area thresholds are currently hardcoded.
 - Validation reports self-intersection and suspicious area, but does not yet
   provide detailed repair guidance.
-- Overlaps are not yet classified by severity.
+- Severity thresholds are currently hardcoded rather than configurable.
 - The API does not yet configure cross-origin resource sharing (CORS) for a
   separately hosted browser frontend.
 
