@@ -77,32 +77,38 @@ sample parcel fixture.
 ## Project structure
 
 ```text
-parcel_resolver/
-  api/
-    resolve.py        # FastAPI POST /resolve endpoint
-  cadastre/
-    __init__.py       # parcel geometry and area validation
-  io/
-    geojson.py        # GeoJSON Polygon and FeatureCollection parsing
-  resolver/
-    overlap.py        # exact two-parcel overlap check
-    index.py          # validation, spatial indexing, and overlap discovery
-    severity.py       # percentage-based overlap severity classification
-tests/
-  fixtures/
-    sample_parcels.py # representative sample polygons
-  test_cadastre.py
-  test_api.py
-  test_index.py
-  test_resolver.py
-  test_severity.py
+backend/
+  parcel_resolver/
+    api/
+      resolve.py        # FastAPI POST /resolve endpoint
+    cadastre/
+      __init__.py       # parcel geometry and area validation
+    io/
+      geojson.py        # GeoJSON Polygon and FeatureCollection parsing
+    resolver/
+      overlap.py        # exact two-parcel overlap check
+      index.py          # validation, spatial indexing, and overlap discovery
+      severity.py       # percentage-based severity classification
+  tests/
+    fixtures/
+      sample_parcels.py # representative sample polygons
+    test_api.py
+    test_cadastre.py
+    test_index.py
+    test_resolver.py
+    test_severity.py
+  requirements.txt
+frontend/
+  src/app/              # Next.js App Router frontend
+  package.json
 ```
 
 ## Getting started
 
-Requires Python 3.9 or later.
+The backend requires Python 3.9 or later. From the repository root:
 
 ```bash
+cd backend
 python -m venv .venv
 ```
 
@@ -110,10 +116,10 @@ Activate the environment, then install the current runtime and test
 dependencies:
 
 ```bash
-python -m pip install -r parcel_resolver/requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-Run the test suite from the repository root:
+Run the backend test suite:
 
 ```bash
 python -m pytest
@@ -124,6 +130,16 @@ Run only the API tests:
 ```bash
 python -m pytest tests/test_api.py -v
 ```
+
+Install and run the Next.js frontend in a separate terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend is available at `http://localhost:3000`.
 
 ## Usage
 
@@ -185,7 +201,8 @@ overlaps = find_overlaps(parcels)
 # list of (first_parcel_id, second_parcel_id, overlap_area) tuples
 ```
 
-Run the temporary end-to-end example currently included in `geojson.py`:
+From the `backend` directory, run the temporary end-to-end example currently
+included in `geojson.py`:
 
 ```bash
 python -m parcel_resolver.io.geojson
@@ -193,7 +210,7 @@ python -m parcel_resolver.io.geojson
 
 ## API
 
-Start the development server:
+From the `backend` directory, start the development server:
 
 ```bash
 python -m uvicorn parcel_resolver.api.resolve:app --reload
