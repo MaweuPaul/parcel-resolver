@@ -30,8 +30,10 @@ that needs attention so a surveyor, land office, or legal team can review it.
 - GeoJSON FeatureCollection parsing into parcel dictionaries keyed by
   `properties.parcelid`
 - Data-driven overlap discovery that accepts any parcel dictionary
+- FastAPI `POST /resolve` endpoint for frontend integration
+- Structured JSON overlap responses and HTTP 400 errors for malformed input
 - Sample parcel fixtures and automated tests for validation, adjacency,
-  overlap detection, and indexed lookup
+  overlap detection, indexed lookup, and API behavior
 
 Coordinates are currently treated as planar `(x, y)` values. Areas are reported
 in the square units of the input coordinate system.
@@ -40,6 +42,9 @@ in the square units of the input coordinate system.
 
 ```text
 GeoJSON FeatureCollection
+       |
+       v
+POST /resolve
        |
        v
 Parcel dictionary
@@ -68,6 +73,8 @@ sample parcel fixture.
 
 ```text
 parcel_resolver/
+  api/
+    resolve.py        # FastAPI POST /resolve endpoint
   cadastre/
     __init__.py       # parcel geometry and area validation
   io/
@@ -79,6 +86,7 @@ tests/
   fixtures/
     sample_parcels.py # representative sample polygons
   test_cadastre.py
+  test_api.py
   test_index.py
   test_resolver.py
 ```
@@ -95,13 +103,19 @@ Activate the environment, then install the current runtime and test
 dependencies:
 
 ```bash
-python -m pip install shapely pytest
+python -m pip install -r parcel_resolver/requirements.txt
 ```
 
 Run the test suite from the repository root:
 
 ```bash
 python -m pytest
+```
+
+Run only the API tests:
+
+```bash
+python -m pytest tests/test_api.py -v
 ```
 
 ## Usage
@@ -170,6 +184,49 @@ Run the temporary end-to-end example currently included in `geojson.py`:
 python -m parcel_resolver.io.geojson
 ```
 
+## API
+
+Start the development server:
+
+```bash
+python -m uvicorn parcel_resolver.api.resolve:app --reload
+```
+
+Interactive API documentation is available at:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+The backend exposes one endpoint:
+
+```text
+POST /resolve
+```
+
+Send a GeoJSON FeatureCollection as the JSON request body. A successful
+response uses named fields that are easy for a frontend to consume:
+
+```json
+{
+  "overlaps": [
+    {
+      "parcel_a": "P001",
+      "parcel_b": "P002",
+      "overlap_area": 4.0
+    }
+  ]
+}
+```
+
+Malformed GeoJSON returns HTTP `400`:
+
+```json
+{
+  "detail": "Invalid GeoJSON: 'features'"
+}
+```
+
 ## Status and roadmap
 
 This is an early-stage prototype; there is no stable release yet.
@@ -181,6 +238,8 @@ This is an early-stage prototype; there is no stable release yet.
 - [x] Automated tests with known parcel cases
 - [x] In-memory GeoJSON FeatureCollection parsing
 - [x] Resolver input decoupled from test fixtures
+- [x] Frontend-facing overlap API
+- [x] API success and error-response tests
 - [ ] Configurable overlap severity thresholds
 - [ ] Reading GeoJSON directly from files
 - [ ] Shapefile input/output
@@ -204,6 +263,8 @@ This is an early-stage prototype; there is no stable release yet.
 - Validation reports self-intersection and suspicious area, but does not yet
   provide detailed repair guidance.
 - Overlaps are not yet classified by severity.
+- The API does not yet configure cross-origin resource sharing (CORS) for a
+  separately hosted browser frontend.
 
 ## License
 

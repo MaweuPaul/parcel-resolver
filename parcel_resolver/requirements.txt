@@ -1,0 +1,5 @@
+fastapi
+httpx2
+pytest
+shapely
+uvicorn
