@@ -6,10 +6,11 @@ from parcel_resolver.resolver.severity import classify_severity
 @pytest.mark.parametrize(
     ("overlap_area", "expected_percentage", "expected_severity"),
     [
-        (0.5, 0.5, "low"),
-        (1.0, 1.0, "medium"),
-        (10.0, 10.0, "medium"),
-        (11.0, 11.0, "high"),
+        (0.0, 0.0, "none"),
+        (0.5, 0.5, "tolerance"),
+        (4.99, 4.99, "tolerance"),
+        (5.0, 5.0, "dispute"),
+        (11.0, 11.0, "dispute"),
     ],
 )
 def test_classify_severity_thresholds(
@@ -27,8 +28,8 @@ def test_classify_severity_uses_smaller_parcel_area():
     result = classify_severity(4.0, 100.0, 400.0)
 
     assert result == {
-        "severity": "medium",
         "overlap_percentage": 4.0,
+        "severity": "tolerance",
     }
 
 

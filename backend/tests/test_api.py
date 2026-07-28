@@ -43,7 +43,7 @@ def test_resolve_returns_structured_overlap_results():
                 "parcel_b": "P002",
                 "overlap_area": 4.0,
                 "overlap_percentage": 4.0,
-                "severity": "medium",
+                "severity": "tolerance",
             }
         ]
     }

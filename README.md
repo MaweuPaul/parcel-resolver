@@ -240,7 +240,7 @@ response uses named fields that are easy for a frontend to consume:
       "parcel_b": "P002",
       "overlap_area": 4.0,
       "overlap_percentage": 4.0,
-      "severity": "medium"
+      "severity": "tolerance"
     }
   ]
 }
@@ -252,12 +252,12 @@ Severity is based on how much of the smaller parcel is covered:
 overlap percentage = overlap area / smaller parcel area × 100
 ```
 
-- Below 1%: `low`
-- 1% through 10%: `medium`
-- Above 10%: `high`
+- No overlap: `none`
+- Below 5%: `tolerance`
+- 5% or above: `dispute`
 
 For example, an overlap area of `4` between two parcels whose smaller area is
-`100` covers 4% of that parcel and is classified as `medium`.
+`100` covers 4% of that parcel and is classified as `tolerance`.
 
 Malformed GeoJSON returns HTTP `400`:
 
