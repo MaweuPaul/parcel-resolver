@@ -92,11 +92,12 @@ backend/
   tests/
     fixtures/
       sample_parcels.py # representative sample polygons
+    resolver/
+      test_index.py
+      test_overlap.py
+      test_severity.py
     test_api.py
     test_cadastre.py
-    test_index.py
-    test_resolver.py
-    test_severity.py
   requirements.txt
 frontend/
   src/app/              # Next.js App Router frontend
