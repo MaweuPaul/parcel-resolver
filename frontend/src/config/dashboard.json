@@ -1,0 +1,94 @@
+{
+    "product": {
+        "name": "GeoWorkspace",
+        "description": "Land and geospatial analysis tools"
+    },
+    "navigation": [
+        {
+            "id": "overview",
+            "label": "Overview",
+            "href": "/",
+            "icon": "layout-dashboard"
+        }
+    ],
+    "toolGroups": [
+        {
+            "id": "analysis",
+            "label": "Analysis tools",
+            "tools": [
+                {
+                    "id": "overlap",
+                    "name": "Parcel overlap detection",
+                    "shortName": "Overlap",
+                    "description": "Detect intersecting parcels and classify conflict severity.",
+                    "href": "/tools/overlap",
+                    "icon": "scan-search",
+                    "status": "available"
+                },
+                {
+                    "id": "validation",
+                    "name": "Geometry validation",
+                    "shortName": "Validation",
+                    "description": "Find invalid polygons, self-intersections, and geometry errors.",
+                    "href": "/tools/validation",
+                    "icon": "badge-check",
+                    "status": "planned"
+                },
+                {
+                    "id": "measurement",
+                    "name": "Area and distance",
+                    "shortName": "Measurement",
+                    "description": "Measure parcel areas, boundaries, and distances.",
+                    "href": "/tools/measurement",
+                    "icon": "ruler",
+                    "status": "planned"
+                }
+            ]
+        },
+        {
+            "id": "data",
+            "label": "Data tools",
+            "tools": [
+                {
+                    "id": "projection",
+                    "name": "Coordinate projection",
+                    "shortName": "Projection",
+                    "description": "Transform spatial data between coordinate reference systems.",
+                    "href": "/tools/projection",
+                    "icon": "boxes",
+                    "status": "planned"
+                },
+                {
+                    "id": "conversion",
+                    "name": "Format conversion",
+                    "shortName": "Conversion",
+                    "description": "Convert data between supported geospatial formats.",
+                    "href": "/tools/conversion",
+                    "icon": "arrow-left-right",
+                    "status": "planned"
+                }
+            ]
+        }
+    ],
+    "overview": {
+        "title": "Geospatial workspace",
+        "description": "Select a tool to analyze or transform spatial data.",
+        "summaryCards": [
+            {
+                "id": "available-tools",
+                "label": "Available tools",
+                "value": 1
+            },
+            {
+                "id": "planned-tools",
+                "label": "Planned tools",
+                "value": 4
+            },
+            {
+                "id": "analyses",
+                "label": "Analyses completed",
+                "value": 0
+            }
+        ]
+    }
+}
