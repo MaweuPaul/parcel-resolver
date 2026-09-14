@@ -5,6 +5,7 @@ from pyproj import CRS
 from pyproj.exceptions import CRSError
 from shapely.geometry import Polygon
 
+from parcel_resolver.api.cors import get_allowed_origins
 from parcel_resolver.cadastre import validate_parcel
 from parcel_resolver.conversion import parcels_to_shapefile_zip
 from parcel_resolver.io.geojson import parse_feature_collection
@@ -17,7 +18,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=get_allowed_origins(),
     allow_methods=["POST"],
     allow_headers=["Content-Type"],
 )

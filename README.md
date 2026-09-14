@@ -21,6 +21,7 @@ human look.
 - [The Resolver Pipeline](#the-resolver-pipeline)
 - [API](#api)
 - [Frontend](#frontend)
+- [Deployment](#deployment)
 - [Repository Layout](#repository-layout)
 - [A Note on How This Was Tested](#a-note-on-how-this-was-tested)
 - [Known Limitations & Rough Edges](#known-limitations--rough-edges)
@@ -201,9 +202,10 @@ npm run dev
 ```
 
 Open `http://localhost:3000` and pick any tool from the sidebar. The
-backend allows cross-origin requests from `http://localhost:3000` only (see
-[Known Limitations](#known-limitations--rough-edges)); if the API is hosted
-somewhere else, point the frontend at it with:
+backend allows cross-origin requests only from origins listed in the
+`CORS_ORIGINS` environment variable (comma-separated; defaults to
+`http://localhost:3000` when unset — see [Deployment](#deployment)); if the
+API is hosted somewhere else, point the frontend at it with:
 
 ```bash
 NEXT_PUBLIC_API_URL=https://your-api-host npm run dev
@@ -534,14 +536,64 @@ grouped exactly the way the sidebar groups them, sourced from the same
 successful response, so the homepage's count updates the next time it's
 visited — including via client-side navigation, without a full reload.
 
+## Deployment
+
+This is a two-service app — a stateless Python API and a static-ish
+Next.js frontend — and each half wants a different kind of host.
+
+**Backend: a persistent process, not a serverless function.** The backend
+has no database and no in-memory session state, so it *could* run as a
+serverless function — but `pyproj` bundles a real chunk of the PROJ
+library's coordinate-system data, which tends to fight serverless
+deployment-size and cold-start budgets for very little benefit here, since
+this app doesn't get the "scales to zero" upside of serverless in the first
+place (a small FastAPI service idles cheaply on its own). A normal
+persistent-process host — [Render](https://render.com),
+[Fly.io](https://fly.io), or [Railway](https://railway.app) — avoids that
+fight entirely: `uvicorn` runs exactly the way it does locally, no
+adapter code needed.
+
+This repo ships [`render.yaml`](render.yaml) as one concrete option (a
+[Render Blueprint](https://render.com/docs/blueprint-spec)):
+
+1. Push this repo to GitHub (already done if you're reading this from
+   there) and create a new Blueprint in the Render dashboard pointing at
+   it. Render reads `render.yaml` from the repo root and provisions a web
+   service rooted at `backend/`, running
+   `uvicorn parcel_resolver.api.resolve:app --host 0.0.0.0 --port $PORT`.
+2. Set the `CORS_ORIGINS` environment variable (left blank in
+   `render.yaml` on purpose — `sync: false` means Render prompts for it
+   rather than a real URL sitting in source control) to your deployed
+   frontend's origin, e.g. `https://your-app.vercel.app`. Comma-separate
+   more than one if you need both a production and a preview frontend
+   origin allowed.
+3. Render gives the service a URL like
+   `https://parcel-resolver-api.onrender.com` — that's what the frontend's
+   `NEXT_PUBLIC_API_URL` points at.
+
+**Frontend: Vercel is a natural fit as-is.** `frontend/` is a stock Next.js
+App Router project with no server-side data fetching that needs the
+backend at build time, so Vercel's default Next.js detection needs no
+extra configuration. Import the repo in Vercel, set its **Root Directory**
+to `frontend`, and set the `NEXT_PUBLIC_API_URL` environment variable to
+the backend's deployed URL (from step 3 above). Because
+`NEXT_PUBLIC_API_URL` is read at build time (see every tool page's
+`API_URL` constant), redeploy the frontend after changing it.
+
+Neither service needs secrets beyond that one URL/origin pair — there's no
+database connection string, no API key, nothing else to configure (see
+[How Data Gets In](#how-data-gets-in-geojson-no-persistence)).
+
 ## Repository Layout
 
 ```text
 parcel-resolver/
+├── render.yaml                  # Render Blueprint for the backend (see Deployment)
 ├── backend/
 │   ├── parcel_resolver/
 │   │   ├── api/
-│   │   │   └── resolve.py       # FastAPI app, CORS config, all five POST endpoints
+│   │   │   ├── resolve.py       # FastAPI app, all five POST endpoints
+│   │   │   └── cors.py          # CORS_ORIGINS env var -> allowed origins list
 │   │   ├── cadastre/
 │   │   │   └── __init__.py      # parcel geometry + area validation
 │   │   ├── conversion/
@@ -566,6 +618,7 @@ parcel-resolver/
 │   │   ├── test_api.py
 │   │   ├── test_cadastre.py
 │   │   ├── test_conversion.py
+│   │   ├── test_cors.py
 │   │   ├── test_measurement.py
 │   │   └── test_projection.py
 │   └── requirements.txt
@@ -633,10 +686,6 @@ a full page reload rather than just an in-memory client-side transition.
 
 ## Known Limitations & Rough Edges
 
-- CORS in `api/resolve.py` allows exactly one hardcoded origin,
-  `http://localhost:3000`. There's no environment-driven configuration yet,
-  so a frontend served from anywhere else needs a code change to reach the
-  API.
 - GeoJSON support only accepts Polygon features and their outer ring;
   MultiPolygon geometries and interior holes (donut-shaped parcels) aren't
   handled.
@@ -697,13 +746,13 @@ it — see [A Note on How This Was Tested](#a-note-on-how-this-was-tested).
 - [x] Coordinate reprojection API (`POST /project`) and dashboard tool
 - [x] GeoJSON-to-Shapefile conversion API (`POST /convert`) and dashboard tool
 - [x] Real dashboard home page (computed summary cards + tool grid, sourced from `dashboard.json`)
+- [x] Configurable CORS origins (`CORS_ORIGINS` env var) and a Render/Vercel deployment path
 - [ ] Distance measurement between parcels (measurement tool is area/perimeter-only today)
 - [ ] Recompute area/perimeter after reprojection, not just coordinates
 - [ ] Shapefile-to-GeoJSON conversion (the reverse direction; `/convert` is one-way today)
 - [ ] Preserve arbitrary GeoJSON `properties` fields through conversion, not just `parcelid`
 - [ ] Additional conversion targets (CSV, KML, GeoPackage)
 - [ ] Repair guidance for flagged geometry, not just a flag name
-- [ ] Configurable CORS origins (currently hardcoded to `localhost:3000`)
 - [ ] Configurable overlap and suspicious-area thresholds
 - [ ] Reading GeoJSON directly from files, not just request bodies
 - [ ] MultiPolygon and interior-hole (donut parcel) support
