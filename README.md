@@ -40,11 +40,12 @@ ones that share area, along with what fraction of the smaller parcel that
 overlap represents.
 
 The backend is a FastAPI service built on [Shapely](https://shapely.readthedocs.io/)
-for the geometry work. The frontend is a Next.js dashboard shell — a sidebar
-of analysis tools, three of which ("Parcel overlap detection", "Geometry
-validation", and "Area and distance") are fully wired up to the API; the
-rest are placeholders for tools that don't exist yet (see
-[Roadmap](#roadmap--to-be-done)).
+for the geometry work and [pyproj](https://pyproj4.github.io/pyproj/) for
+coordinate reprojection. The frontend is a Next.js dashboard shell — a
+sidebar of analysis tools, four of which ("Parcel overlap detection",
+"Geometry validation", "Area and distance", and "Coordinate projection")
+are fully wired up to the API; the rest are placeholders for tools that
+don't exist yet (see [Roadmap](#roadmap--to-be-done)).
 
 ## Why It's Built This Way
 
@@ -108,11 +109,23 @@ block at the bottom of `geojson.py`.
 **A dashboard shell built for more than one tool.** The sidebar's navigation
 config (`frontend/src/config/dashboard.json`) lists every analysis tool with
 a status of `available` or `planned`; the shell renders a "Soon" badge for
-anything still planned and otherwise just links to it. Validation and
-measurement both went from `planned` to `available` without touching
-`sidebar.tsx` at all — adding the next tool means adding a page under
-`app/tools/<name>` and flipping one entry in that config, not restructuring
-navigation around it. Projection and format conversion are still `planned`.
+anything still planned and otherwise just links to it. Validation,
+measurement, and projection have all gone from `planned` to `available`
+without touching `sidebar.tsx` at all — adding the next tool means adding a
+page under `app/tools/<name>` and flipping one entry in that config, not
+restructuring navigation around it. Format conversion is the one tool still
+`planned`.
+
+**Reprojection always pins coordinate order, because the alternative is a
+silent bug.** `projection.reproject_coordinates` calls
+`Transformer.from_crs(..., always_xy=True)`. Without `always_xy`, pyproj
+honors each CRS's own defined axis order — and EPSG:4326 (WGS84) is
+officially defined as (latitude, longitude), not (longitude, latitude).
+Every GeoJSON coordinate in this codebase, and in GeoJSON generally, is
+`[x, y]` i.e. `[longitude, latitude]`. Skipping `always_xy` wouldn't error;
+it would just silently transpose every WGS84 coordinate and produce
+plausible-looking, wrong output. This is a well-known pyproj gotcha and
+worth naming explicitly rather than leaving future-you to rediscover it.
 
 ## Running It
 
@@ -140,8 +153,8 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` and go to **Overlap**, **Validation**, or
-**Measurement** in the sidebar. The
+Open `http://localhost:3000` and go to **Overlap**, **Validation**,
+**Measurement**, or **Projection** in the sidebar. The
 backend allows cross-origin requests from `http://localhost:3000` only (see
 [Known Limitations](#known-limitations--rough-edges)); if the API is hosted
 somewhere else, point the frontend at it with:
@@ -177,8 +190,8 @@ Every feature in that collection needs:
 
 Anything short of that — a missing `features` key, a non-Polygon geometry, a
 feature with no `parcelid` — raises a Python exception that `/resolve`,
-`/validate`, and `/measure` all turn into an HTTP 400 with the exception's
-own message, e.g. `"Invalid GeoJSON: 'features'"`.
+`/validate`, `/measure`, and `/project` all turn into an HTTP 400 with the
+exception's own message, e.g. `"Invalid GeoJSON: 'features'"`.
 
 Coordinates are treated as planar `(x, y)` values throughout. There is no
 coordinate-reference-system handling: geographic latitude/longitude needs to
@@ -346,6 +359,38 @@ between parcels, and no distance measurement between them yet (see
 }
 ```
 
+```text
+POST /project?source_crs=EPSG:4326&target_crs=EPSG:3857
+```
+
+Body: a GeoJSON `FeatureCollection`. Unlike the other endpoints, `/project`
+also needs two query parameters — `source_crs` and `target_crs` — since a
+reprojection isn't meaningful without knowing both ends. Any string
+[pyproj](https://pyproj4.github.io/pyproj/) accepts works, most commonly an
+EPSG code (`"EPSG:4326"`). Returns each parcel's coordinates reprojected
+into `target_crs`:
+
+```json
+{
+  "source_crs": "EPSG:4326",
+  "target_crs": "EPSG:3857",
+  "parcels": [
+    {
+      "parcel_id": "P001",
+      "coordinates": [[-13627665.27, 4547675.35], ["..."]]
+    }
+  ]
+}
+```
+
+An unrecognized CRS string returns HTTP `400`:
+
+```json
+{
+  "detail": "Invalid CRS: Invalid projection: NOT_A_CRS: ..."
+}
+```
+
 Direct function usage, without going through the API at all:
 
 ```python
@@ -366,16 +411,20 @@ from parcel_resolver.measurement import measure_parcel
 
 measure_parcel(parcel_a)
 # {"area": 100.0, "perimeter": 40.0}
+
+from parcel_resolver.projection import reproject_coordinates
+
+reproject_coordinates([(-122.4194, 37.7749)], "EPSG:4326", "EPSG:3857")
+# [(-13627665.27, 4547675.35)]
 ```
 
 ## Frontend
 
-Three tools are wired up end to end, and all three share the same
-interaction pattern deliberately — paste a GeoJSON `FeatureCollection`
-directly, upload a `.json`/`.geojson` file, or click **Load sample** for a
-ready-made example. Invalid JSON is caught client-side before it's sent; a
-non-2xx response or an unreachable API surfaces the server's own error
-message inline instead of a stack trace.
+Four tools are wired up end to end, and all of them share the same paste /
+upload / **Load sample** interaction pattern deliberately. Invalid JSON is
+caught client-side before it's sent; a non-2xx response or an unreachable
+API surfaces the server's own error message inline instead of a stack
+trace.
 
 - `frontend/src/app/tools/overlap/page.tsx` submits to `POST {API_URL}/resolve`
   and renders a table of overlapping pairs — parcel A, parcel B, overlap
@@ -388,10 +437,18 @@ message inline instead of a stack trace.
 - `frontend/src/app/tools/measurement/page.tsx` submits to
   `POST {API_URL}/measure` and renders one row per parcel — parcel ID, area,
   and perimeter.
+- `frontend/src/app/tools/projection/page.tsx` adds a source/target CRS
+  field pair (autocompleted against a handful of common EPSG codes via an
+  HTML `<datalist>`, but free text is accepted — any string pyproj
+  understands works) on top of the usual GeoJSON input, submits to
+  `POST {API_URL}/project?source_crs=...&target_crs=...`, and renders each
+  parcel's reprojected coordinate ring as raw JSON in a scrollable
+  monospace block, since a table doesn't suit an arbitrary-length list of
+  coordinate pairs the way it suits one value per parcel.
 
-Every other entry in the sidebar (**Projection**, **Conversion**) is a
-`planned`-status placeholder wired through `dashboard.json` — the link
-exists and shows a "Soon" badge, but there's no page behind it yet.
+Format conversion is the one entry left in the sidebar without a page
+behind it — a `planned`-status placeholder wired through `dashboard.json`
+that shows a "Soon" badge.
 
 ## Repository Layout
 
@@ -400,13 +457,15 @@ parcel-resolver/
 ├── backend/
 │   ├── parcel_resolver/
 │   │   ├── api/
-│   │   │   └── resolve.py       # FastAPI app, CORS config, POST /resolve + /validate + /measure
+│   │   │   └── resolve.py       # FastAPI app, CORS config, POST /resolve + /validate + /measure + /project
 │   │   ├── cadastre/
 │   │   │   └── __init__.py      # parcel geometry + area validation
 │   │   ├── io/
 │   │   │   └── geojson.py       # GeoJSON Polygon + FeatureCollection parsing
 │   │   ├── measurement/
 │   │   │   └── __init__.py      # per-parcel area + perimeter
+│   │   ├── projection/
+│   │   │   └── __init__.py      # coordinate reference system reprojection
 │   │   └── resolver/
 │   │       ├── overlap.py       # exact two-parcel overlap check
 │   │       ├── index.py         # validation + spatial index + overlap discovery
@@ -420,7 +479,8 @@ parcel-resolver/
 │   │   │   └── test_severity.py
 │   │   ├── test_api.py
 │   │   ├── test_cadastre.py
-│   │   └── test_measurement.py
+│   │   ├── test_measurement.py
+│   │   └── test_projection.py
 │   └── requirements.txt
 └── frontend/
     ├── src/
@@ -431,8 +491,10 @@ parcel-resolver/
     │   │       │   └── page.tsx     # overlap detection tool
     │   │       ├── validation/
     │   │       │   └── page.tsx     # geometry validation tool
-    │   │       └── measurement/
-    │   │           └── page.tsx     # area + perimeter tool
+    │   │       ├── measurement/
+    │   │       │   └── page.tsx     # area + perimeter tool
+    │   │       └── projection/
+    │   │           └── page.tsx     # CRS reprojection tool
     │   ├── components/shell/
     │   │   ├── sidebar.tsx
     │   │   └── nav-link.tsx
@@ -447,17 +509,23 @@ The backend has an automated `pytest` suite covering cadastre validation
 (valid parcels, self-intersecting geometry, suspicious tiny/huge areas),
 overlap detection (overlapping, adjacent-but-not-overlapping, disjoint
 pairs), spatial-index-driven discovery across the full sample fixture set,
-percentage-based severity classification, area/perimeter measurement, and
-`/resolve`, `/validate`, and `/measure`'s success and HTTP-400 paths. Run it
-with `python -m pytest` from `backend/`.
+percentage-based severity classification, area/perimeter measurement,
+coordinate reprojection (an identity transform, a known WGS84 → Web
+Mercator conversion checked against pyproj's own output, and a
+shape-preservation sanity check), and `/resolve`, `/validate`, `/measure`,
+and `/project`'s success and HTTP-400 paths. Run it with `python -m pytest`
+from `backend/`.
 
-All three frontend tools were verified end-to-end in a real browser against
+All four frontend tools were verified end-to-end in a real browser against
 a running backend, not just checked for compiling: the overlap tool's sample
 `FeatureCollection` returns the expected pair (`P001`/`P002`, 4 square
 units, 4.00%, `tolerance`); the validation tool's sample returns one valid
 parcel and one flagged `self intersecting, suspicious area` parcel; the
-measurement tool's sample returns `P001` at area `100`, perimeter `40`. All
-three rendered correctly with no console errors, and the sidebar's status
+measurement tool's sample returns `P001` at area `100`, perimeter `40`; the
+projection tool's sample reprojects `P001` from `EPSG:4326` to `EPSG:3857`
+with coordinates matching a direct API call byte-for-byte, and a deliberately
+invalid CRS string surfaces the backend's `Invalid CRS: ...` message inline.
+All four rendered correctly with no console errors, and the sidebar's status
 badges were confirmed to match.
 
 ## Known Limitations & Rough Edges
@@ -482,6 +550,11 @@ badges were confirmed to match.
 - `/measure` reports each parcel's own area and perimeter only — there's no
   distance measurement *between* parcels yet, even though the sidebar's
   tool description ("Area and distance") implies it.
+- `/project` reprojects coordinates only; it doesn't recompute area or
+  perimeter in the target CRS, and it accepts whatever CRS string pyproj
+  can resolve without validating that it's an appropriate choice for the
+  input data (e.g. nothing stops reprojecting already-planar local survey
+  coordinates as if they were WGS84 lat/lon).
 
 ## Contributing
 
@@ -510,7 +583,9 @@ it — see [A Note on How This Was Tested](#a-note-on-how-this-was-tested).
 - [x] Fix the `httpx2` → `httpx` typo in `requirements.txt`
 - [x] Geometry validation API (`POST /validate`) and dashboard tool
 - [x] Area/perimeter measurement API (`POST /measure`) and dashboard tool
+- [x] Coordinate reprojection API (`POST /project`) and dashboard tool
 - [ ] Distance measurement between parcels (measurement tool is area/perimeter-only today)
+- [ ] Recompute area/perimeter after reprojection, not just coordinates
 - [ ] Repair guidance for flagged geometry, not just a flag name
 - [ ] Configurable CORS origins (currently hardcoded to `localhost:3000`)
 - [ ] Configurable overlap and suspicious-area thresholds
@@ -520,8 +595,7 @@ it — see [A Note on How This Was Tested](#a-note-on-how-this-was-tested).
 - [ ] Persistent spatial storage
 - [ ] Command-line batch processing
 - [ ] Benchmarks on larger datasets
-- [ ] Projection and format-conversion tools (currently placeholders in the
-      sidebar)
+- [ ] Format-conversion tool (the one placeholder left in the sidebar)
 - [ ] Real dashboard home page (currently the default `create-next-app`
       scaffold)
 

@@ -159,3 +159,74 @@ def test_measure_rejects_feature_collection_without_features():
     assert response.json() == {
         "detail": "Invalid GeoJSON: 'features'",
     }
+
+
+def test_project_reprojects_parcel_coordinates():
+    feature_collection = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"parcelid": "P001"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
+                },
+            },
+        ],
+    }
+
+    response = client.post(
+        "/project",
+        params={"source_crs": "EPSG:4326", "target_crs": "EPSG:4326"},
+        json=feature_collection,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source_crs"] == "EPSG:4326"
+    assert body["target_crs"] == "EPSG:4326"
+    assert body["parcels"] == [
+        {
+            "parcel_id": "P001",
+            "coordinates": [[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]],
+        },
+    ]
+
+
+def test_project_rejects_feature_collection_without_features():
+    response = client.post(
+        "/project",
+        params={"source_crs": "EPSG:4326", "target_crs": "EPSG:3857"},
+        json={"type": "FeatureCollection"},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "Invalid GeoJSON: 'features'",
+    }
+
+
+def test_project_rejects_unknown_crs():
+    feature_collection = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"parcelid": "P001"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
+                },
+            },
+        ],
+    }
+
+    response = client.post(
+        "/project",
+        params={"source_crs": "NOT_A_CRS", "target_crs": "EPSG:3857"},
+        json=feature_collection,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"].startswith("Invalid CRS:")

@@ -56,7 +56,7 @@
                     "description": "Transform spatial data between coordinate reference systems.",
                     "href": "/tools/projection",
                     "icon": "boxes",
-                    "status": "planned"
+                    "status": "available"
                 },
                 {
                     "id": "conversion",
@@ -77,12 +77,12 @@
             {
                 "id": "available-tools",
                 "label": "Available tools",
-                "value": 3
+                "value": 4
             },
             {
                 "id": "planned-tools",
                 "label": "Planned tools",
-                "value": 2
+                "value": 1
             },
             {
                 "id": "analyses",

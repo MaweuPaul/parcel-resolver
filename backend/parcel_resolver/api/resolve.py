@@ -1,10 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pyproj.exceptions import CRSError
 from shapely.geometry import Polygon
 
 from parcel_resolver.cadastre import validate_parcel
 from parcel_resolver.io.geojson import parse_feature_collection
 from parcel_resolver.measurement import measure_parcel
+from parcel_resolver.projection import reproject_coordinates
 from parcel_resolver.resolver.index import find_overlaps
 from parcel_resolver.resolver.severity import classify_severity
 
@@ -104,3 +106,46 @@ async def measure_parcels(feature_collection: dict):
 
     return {"parcels": results}
 
+
+@app.post("/project")
+async def project_parcels(
+    feature_collection: dict,
+    source_crs: str = Query(..., description='e.g. "EPSG:4326"'),
+    target_crs: str = Query(..., description='e.g. "EPSG:3857"'),
+):
+    """
+    Endpoint to reproject parcel coordinates from a GeoJSON FeatureCollection
+    between coordinate reference systems.
+
+    Args:
+        feature_collection (dict): A GeoJSON FeatureCollection object.
+        source_crs (str): The CRS the input coordinates are already in.
+        target_crs (str): The CRS to reproject into."""
+
+    try:
+        parcels = parse_feature_collection(feature_collection)
+    except (ValueError, KeyError, TypeError, IndexError) as error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid GeoJSON: {error}",
+        ) from error
+
+    try:
+        results = [
+            {
+                "parcel_id": parcel_id,
+                "coordinates": reproject_coordinates(coords, source_crs, target_crs),
+            }
+            for parcel_id, coords in parcels.items()
+        ]
+    except CRSError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid CRS: {error}",
+        ) from error
+
+    return {
+        "source_crs": source_crs,
+        "target_crs": target_crs,
+        "parcels": results,
+    }
