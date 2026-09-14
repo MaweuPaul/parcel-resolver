@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from shapely.geometry import Polygon
 
 from parcel_resolver.io.geojson import parse_feature_collection
@@ -6,6 +7,13 @@ from parcel_resolver.resolver.index import find_overlaps
 from parcel_resolver.resolver.severity import classify_severity
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["POST"],
+    allow_headers=["Content-Type"],
+)
 
 @app.post("/resolve")
 async def resolve_parcels(feature_collection: dict):
