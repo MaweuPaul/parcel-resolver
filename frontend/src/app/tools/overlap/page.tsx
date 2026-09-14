@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { ScanSearch, UploadCloud } from "lucide-react";
 
+import { recordAnalysisCompleted } from "@/lib/analytics";
+
 type OverlapResult = {
   parcel_a: string;
   parcel_b: string;
@@ -111,6 +113,7 @@ export default function OverlapPage() {
       }
 
       setResults((body as ResolveResponse).overlaps);
+      recordAnalysisCompleted();
     } catch {
       setError(
         `Couldn't reach the resolver API at ${API_URL}. Is the backend running?`,

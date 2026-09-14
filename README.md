@@ -114,6 +114,43 @@ anything still planned and otherwise just links to it. Every tool has now
 gone from `planned` to `available` without touching `sidebar.tsx` at all —
 adding the next one still means adding a page under `app/tools/<name>` and
 flipping one entry in that config, not restructuring navigation around it.
+The dashboard home page (`app/page.tsx`) reads the same config and renders
+from it too, so a new tool shows up on both the sidebar and the homepage
+from one edit.
+
+**Tool counts are computed, not duplicated.** The homepage used to read
+"Available tools" / "Planned tools" from static numbers hand-maintained in
+`dashboard.json`'s `summaryCards` — numbers that had to be manually bumped
+in five separate commits as tools shipped, and that quietly drifted from
+the actual tool list any time someone forgot. Those two counts are now
+derived by filtering `dashboard.json`'s own `toolGroups` by `status`, so
+there's exactly one source of truth (the per-tool `status` field) instead
+of two that can disagree — the same category of fix as the severity
+duplication described above.
+
+**"Analyses completed" is an honest number, not a fake one.** A metric like
+this normally implies server-side tracking this project doesn't have (see
+[How Data Gets In](#how-data-gets-in-geojson-no-persistence) — nothing is
+persisted). Rather than hardcode a permanent `0` or invent a count that
+isn't real, `lib/analytics.ts` tracks successful tool runs in
+`localStorage`, scoped to one browser, via `useSyncExternalStore` (not a
+`useEffect` + `setState` — the newer `react-hooks/set-state-in-effect`
+ESLint rule flags that pattern, and `useSyncExternalStore` is what React
+actually recommends for reading state owned by something outside React,
+which `localStorage` is). The homepage says exactly what this number is
+and isn't, right under the summary cards, rather than let it be mistaken
+for real usage analytics.
+
+**The theme is deliberately light-only, so the CSS says that explicitly.**
+`create-next-app`'s default `globals.css` ships a `prefers-color-scheme:
+dark` media query that repaints `body` near-black for anyone with a
+dark-mode OS or browser setting — harmless on the original placeholder
+page, but it fought every hardcoded light color in this dashboard (the
+`#F6F6F1` background, the white cards) once real content replaced it,
+producing a broken half-dark page for a meaningful share of visitors.
+`globals.css` now imports Tailwind and nothing else; `layout.tsx`'s own
+`bg-[#F6F6F1] text-[#17211F]` on `<body>` is the only background rule left,
+so there's nothing for an OS setting to override.
 
 **Reprojection always pins coordinate order, because the alternative is a
 silent bug.** `projection.reproject_coordinates` calls
@@ -487,6 +524,16 @@ a stack trace.
   a `Blob`, builds an object URL, and clicks a synthetic `<a download>` to
   save `parcels.zip`, rather than rendering a results table.
 
+`app/page.tsx`, the dashboard home page, isn't a tool itself — it renders
+three summary cards (available tools, planned tools, and analyses
+completed, all computed rather than hand-maintained; see
+[Why It's Built This Way](#why-its-built-this-way)) and a card per tool
+grouped exactly the way the sidebar groups them, sourced from the same
+`dashboard.json`. Each of the five tool pages calls
+`recordAnalysisCompleted()` from `lib/analytics.ts` right after a
+successful response, so the homepage's count updates the next time it's
+visited — including via client-side navigation, without a full reload.
+
 ## Repository Layout
 
 ```text
@@ -525,7 +572,7 @@ parcel-resolver/
 └── frontend/
     ├── src/
     │   ├── app/
-    │   │   ├── page.tsx             # dashboard home (still default scaffold — see Roadmap)
+    │   │   ├── page.tsx             # dashboard home: summary cards + tool grid, both computed from dashboard.json
     │   │   └── tools/
     │   │       ├── overlap/
     │   │       │   └── page.tsx     # overlap detection tool
@@ -540,8 +587,10 @@ parcel-resolver/
     │   ├── components/shell/
     │   │   ├── sidebar.tsx
     │   │   └── nav-link.tsx
-    │   └── config/
-    │       └── dashboard.json       # sidebar nav + tool status, drives the shell
+    │   ├── config/
+    │   │   └── dashboard.json       # tool list + status; drives the sidebar and the homepage
+    │   └── lib/
+    │       └── analytics.ts         # localStorage-backed "analyses completed" counter
     └── package.json
 ```
 
@@ -573,6 +622,14 @@ also checked — an invalid CRS string surfaces the backend's `Invalid CRS:
 ...` message inline on both the projection and conversion tools. All five
 rendered correctly with no console errors, and the sidebar shows no
 remaining "Soon" badges.
+
+The dashboard home page was verified the same way: its tab title changed
+from the default "Create Next App" to "GeoWorkspace", its summary cards
+correctly read `5` available / `0` planned straight off `dashboard.json`,
+and — the part that actually needed a real browser to check — running the
+overlap tool's sample and then reloading the homepage moved "Analyses
+completed" from `0` to `1`, confirming the `localStorage` counter survives
+a full page reload rather than just an in-memory client-side transition.
 
 ## Known Limitations & Rough Edges
 
@@ -606,6 +663,9 @@ remaining "Soon" badges.
   implemented, and there's no CSV, KML, or GeoPackage output either.
 - Every shapefile record carries exactly one attribute, `parcelid` — no
   other GeoJSON `properties` fields survive the conversion.
+- "Analyses completed" on the dashboard home page is a per-browser
+  `localStorage` count, not a real usage metric — it means nothing across
+  devices or browsers, and resets if the user clears site data.
 
 ## Contributing
 
@@ -636,6 +696,7 @@ it — see [A Note on How This Was Tested](#a-note-on-how-this-was-tested).
 - [x] Area/perimeter measurement API (`POST /measure`) and dashboard tool
 - [x] Coordinate reprojection API (`POST /project`) and dashboard tool
 - [x] GeoJSON-to-Shapefile conversion API (`POST /convert`) and dashboard tool
+- [x] Real dashboard home page (computed summary cards + tool grid, sourced from `dashboard.json`)
 - [ ] Distance measurement between parcels (measurement tool is area/perimeter-only today)
 - [ ] Recompute area/perimeter after reprojection, not just coordinates
 - [ ] Shapefile-to-GeoJSON conversion (the reverse direction; `/convert` is one-way today)
@@ -649,8 +710,6 @@ it — see [A Note on How This Was Tested](#a-note-on-how-this-was-tested).
 - [ ] Persistent spatial storage
 - [ ] Command-line batch processing
 - [ ] Benchmarks on larger datasets
-- [ ] Real dashboard home page (currently the default `create-next-app`
-      scaffold)
 
 ## License
 

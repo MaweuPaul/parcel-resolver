@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { Boxes, UploadCloud } from "lucide-react";
 
+import { recordAnalysisCompleted } from "@/lib/analytics";
+
 type ProjectedParcel = {
   parcel_id: string;
   coordinates: [number, number][];
@@ -108,6 +110,7 @@ export default function ProjectionPage() {
       }
 
       setResults(body as ProjectResponse);
+      recordAnalysisCompleted();
     } catch {
       setError(
         `Couldn't reach the resolver API at ${API_URL}. Is the backend running?`,

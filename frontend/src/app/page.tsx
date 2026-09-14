@@ -1,65 +1,120 @@
-import Image from "next/image";
+"use client";
+
+import Link from "next/link";
+import {
+  ArrowLeftRight,
+  BadgeCheck,
+  Boxes,
+  Ruler,
+  ScanSearch,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+import dashboard from "@/config/dashboard.json";
+import { useAnalysesCompleted } from "@/lib/analytics";
+
+const icons: Record<string, LucideIcon> = {
+  "scan-search": ScanSearch,
+  "badge-check": BadgeCheck,
+  ruler: Ruler,
+  boxes: Boxes,
+  "arrow-left-right": ArrowLeftRight,
+};
 
 export default function Home() {
+  const analysesCompleted = useAnalysesCompleted();
+
+  const allTools = dashboard.toolGroups.flatMap((group) => group.tools);
+  const availableCount = allTools.filter((tool) => tool.status === "available").length;
+  const plannedCount = allTools.length - availableCount;
+
+  const summaryCards = [
+    { id: "available-tools", label: "Available tools", value: availableCount },
+    { id: "planned-tools", label: "Planned tools", value: plannedCount },
+    {
+      id: "analyses",
+      label: "Analyses completed",
+      value: analysesCompleted,
+    },
+  ];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="mx-auto flex max-w-5xl flex-col gap-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-[#17211F]">
+          {dashboard.overview.title}
+        </h1>
+        <p className="mt-1 text-sm text-[#17211F]/60">
+          {dashboard.overview.description}
+        </p>
+      </header>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {summaryCards.map((card) => (
+          <div
+            key={card.id}
+            className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+            <p className="text-3xl font-semibold tracking-tight text-[#17211F]">
+              {card.value}
+            </p>
+            <p className="mt-1 text-sm text-[#17211F]/60">{card.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <p className="-mt-4 text-xs text-[#17211F]/40">
+        &ldquo;Analyses completed&rdquo; counts successful tool runs in this
+        browser only — it isn&apos;t tracked on the server, and clearing site
+        data resets it to zero.
+      </p>
+
+      {dashboard.toolGroups.map((group) => (
+        <section key={group.id} className="flex flex-col gap-3">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#17211F]/50">
+            {group.label}
+          </h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {group.tools.map((tool) => {
+              const Icon = icons[tool.icon];
+              const isAvailable = tool.status === "available";
+
+              return (
+                <Link
+                  key={tool.id}
+                  href={tool.href}
+                  aria-disabled={!isAvailable}
+                  onClick={(event) => {
+                    if (!isAvailable) event.preventDefault();
+                  }}
+                  className={`flex flex-col gap-3 rounded-2xl border border-black/10 bg-white p-5 shadow-sm transition-colors ${
+                    isAvailable
+                      ? "hover:border-[#D3A62C]"
+                      : "cursor-default opacity-60"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="grid size-10 place-items-center rounded-xl bg-[#0A332E] text-[#D3A62C]">
+                      {Icon && <Icon aria-hidden="true" className="size-4" />}
+                    </span>
+                    {!isAvailable && (
+                      <span className="rounded-full bg-black/5 px-2 py-0.5 text-[11px] font-semibold text-[#17211F]/60">
+                        Soon
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-[#17211F]">{tool.name}</h3>
+                    <p className="mt-1 text-sm text-[#17211F]/60">
+                      {tool.description}
+                    </p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

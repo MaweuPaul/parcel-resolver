@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { ArrowLeftRight, UploadCloud } from "lucide-react";
 
+import { recordAnalysisCompleted } from "@/lib/analytics";
+
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
 
@@ -108,6 +110,7 @@ export default function ConversionPage() {
       URL.revokeObjectURL(url);
 
       setStatus("parcels.zip downloaded — a zipped Shapefile (.shp/.shx/.dbf).");
+      recordAnalysisCompleted();
     } catch {
       setError(
         `Couldn't reach the resolver API at ${API_URL}. Is the backend running?`,

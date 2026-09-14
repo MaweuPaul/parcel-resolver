@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { Ruler, UploadCloud } from "lucide-react";
 
+import { recordAnalysisCompleted } from "@/lib/analytics";
+
 type ParcelMeasurement = {
   parcel_id: string;
   area: number;
@@ -87,6 +89,7 @@ export default function MeasurementPage() {
       }
 
       setResults((body as MeasureResponse).parcels);
+      recordAnalysisCompleted();
     } catch {
       setError(
         `Couldn't reach the resolver API at ${API_URL}. Is the backend running?`,

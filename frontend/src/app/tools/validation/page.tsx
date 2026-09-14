@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { BadgeCheck, UploadCloud } from "lucide-react";
 
+import { recordAnalysisCompleted } from "@/lib/analytics";
+
 type ParcelValidation = {
   parcel_id: string;
   is_valid: boolean;
@@ -104,6 +106,7 @@ export default function ValidationPage() {
       }
 
       setResults((body as ValidateResponse).parcels);
+      recordAnalysisCompleted();
     } catch {
       setError(
         `Couldn't reach the resolver API at ${API_URL}. Is the backend running?`,

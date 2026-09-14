@@ -72,23 +72,6 @@
     ],
     "overview": {
         "title": "Geospatial workspace",
-        "description": "Select a tool to analyze or transform spatial data.",
-        "summaryCards": [
-            {
-                "id": "available-tools",
-                "label": "Available tools",
-                "value": 5
-            },
-            {
-                "id": "planned-tools",
-                "label": "Planned tools",
-                "value": 0
-            },
-            {
-                "id": "analyses",
-                "label": "Analyses completed",
-                "value": 0
-            }
-        ]
+        "description": "Select a tool to analyze or transform spatial data."
     }
 }
