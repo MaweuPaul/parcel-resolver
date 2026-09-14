@@ -32,7 +32,7 @@
                     "description": "Find invalid polygons, self-intersections, and geometry errors.",
                     "href": "/tools/validation",
                     "icon": "badge-check",
-                    "status": "planned"
+                    "status": "available"
                 },
                 {
                     "id": "measurement",
@@ -77,12 +77,12 @@
             {
                 "id": "available-tools",
                 "label": "Available tools",
-                "value": 1
+                "value": 2
             },
             {
                 "id": "planned-tools",
                 "label": "Planned tools",
-                "value": 4
+                "value": 3
             },
             {
                 "id": "analyses",
