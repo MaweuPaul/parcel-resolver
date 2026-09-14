@@ -65,7 +65,7 @@
                     "description": "Convert data between supported geospatial formats.",
                     "href": "/tools/conversion",
                     "icon": "arrow-left-right",
-                    "status": "planned"
+                    "status": "available"
                 }
             ]
         }
@@ -77,12 +77,12 @@
             {
                 "id": "available-tools",
                 "label": "Available tools",
-                "value": 4
+                "value": 5
             },
             {
                 "id": "planned-tools",
                 "label": "Planned tools",
-                "value": 1
+                "value": 0
             },
             {
                 "id": "analyses",

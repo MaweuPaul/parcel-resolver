@@ -1,3 +1,6 @@
+import io
+import zipfile
+
 from fastapi.testclient import TestClient
 
 from parcel_resolver.api.resolve import app
@@ -225,6 +228,104 @@ def test_project_rejects_unknown_crs():
     response = client.post(
         "/project",
         params={"source_crs": "NOT_A_CRS", "target_crs": "EPSG:3857"},
+        json=feature_collection,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"].startswith("Invalid CRS:")
+
+
+def test_convert_returns_a_zipped_shapefile():
+    feature_collection = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"parcelid": "P001"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]
+                    ],
+                },
+            },
+        ],
+    }
+
+    response = client.post("/convert", json=feature_collection)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert "parcels.zip" in response.headers["content-disposition"]
+
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert set(archive.namelist()) == {
+            "parcels.shp",
+            "parcels.shx",
+            "parcels.dbf",
+        }
+
+
+def test_convert_includes_prj_when_crs_given():
+    feature_collection = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"parcelid": "P001"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]
+                    ],
+                },
+            },
+        ],
+    }
+
+    response = client.post(
+        "/convert",
+        params={"crs": "EPSG:4326"},
+        json=feature_collection,
+    )
+
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert "parcels.prj" in archive.namelist()
+
+
+def test_convert_rejects_feature_collection_without_features():
+    response = client.post(
+        "/convert",
+        json={"type": "FeatureCollection"},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "Invalid GeoJSON: 'features'",
+    }
+
+
+def test_convert_rejects_unknown_crs():
+    feature_collection = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"parcelid": "P001"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]
+                    ],
+                },
+            },
+        ],
+    }
+
+    response = client.post(
+        "/convert",
+        params={"crs": "NOT_A_CRS"},
         json=feature_collection,
     )
 

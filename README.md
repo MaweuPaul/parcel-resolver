@@ -40,12 +40,13 @@ ones that share area, along with what fraction of the smaller parcel that
 overlap represents.
 
 The backend is a FastAPI service built on [Shapely](https://shapely.readthedocs.io/)
-for the geometry work and [pyproj](https://pyproj4.github.io/pyproj/) for
-coordinate reprojection. The frontend is a Next.js dashboard shell — a
-sidebar of analysis tools, four of which ("Parcel overlap detection",
-"Geometry validation", "Area and distance", and "Coordinate projection")
-are fully wired up to the API; the rest are placeholders for tools that
-don't exist yet (see [Roadmap](#roadmap--to-be-done)).
+for the geometry work, [pyproj](https://pyproj4.github.io/pyproj/) for
+coordinate reprojection, and [pyshp](https://github.com/GeospatialPython/pyshp)
+for Shapefile output. The frontend is a Next.js dashboard shell — every tool
+in the sidebar ("Parcel overlap detection", "Geometry validation", "Area
+and distance", "Coordinate projection", and "Format conversion") is fully
+wired up to the API (see [Roadmap](#roadmap--to-be-done) for what's still
+missing within each one).
 
 ## Why It's Built This Way
 
@@ -109,12 +110,10 @@ block at the bottom of `geojson.py`.
 **A dashboard shell built for more than one tool.** The sidebar's navigation
 config (`frontend/src/config/dashboard.json`) lists every analysis tool with
 a status of `available` or `planned`; the shell renders a "Soon" badge for
-anything still planned and otherwise just links to it. Validation,
-measurement, and projection have all gone from `planned` to `available`
-without touching `sidebar.tsx` at all — adding the next tool means adding a
-page under `app/tools/<name>` and flipping one entry in that config, not
-restructuring navigation around it. Format conversion is the one tool still
-`planned`.
+anything still planned and otherwise just links to it. Every tool has now
+gone from `planned` to `available` without touching `sidebar.tsx` at all —
+adding the next one still means adding a page under `app/tools/<name>` and
+flipping one entry in that config, not restructuring navigation around it.
 
 **Reprojection always pins coordinate order, because the alternative is a
 silent bug.** `projection.reproject_coordinates` calls
@@ -126,6 +125,17 @@ Every GeoJSON coordinate in this codebase, and in GeoJSON generally, is
 it would just silently transpose every WGS84 coordinate and produce
 plausible-looking, wrong output. This is a well-known pyproj gotcha and
 worth naming explicitly rather than leaving future-you to rediscover it.
+
+**Shapefile output reorients rings, not just copies coordinates.** The
+ESRI Shapefile spec requires outer polygon rings to be wound clockwise;
+this codebase's own parcel fixtures (and most hand-written GeoJSON) are
+wound counter-clockwise. `conversion.parcels_to_shapefile_zip` runs every
+ring through Shapely's `orient(..., sign=-1.0)` before handing it to
+`pyshp`. Skipping that step wouldn't raise an error either — `pyshp` writes
+whatever ring order it's given — but GIS software that honors winding
+(ArcGIS in particular) would silently read the "outer" ring as a hole and
+render an empty parcel. Same category of bug as the projection axis-order
+issue above: technically valid-looking output that's wrong.
 
 ## Running It
 
@@ -153,8 +163,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` and go to **Overlap**, **Validation**,
-**Measurement**, or **Projection** in the sidebar. The
+Open `http://localhost:3000` and pick any tool from the sidebar. The
 backend allows cross-origin requests from `http://localhost:3000` only (see
 [Known Limitations](#known-limitations--rough-edges)); if the API is hosted
 somewhere else, point the frontend at it with:
@@ -189,9 +198,10 @@ Every feature in that collection needs:
   results, in skip messages, in the frontend table)
 
 Anything short of that — a missing `features` key, a non-Polygon geometry, a
-feature with no `parcelid` — raises a Python exception that `/resolve`,
-`/validate`, `/measure`, and `/project` all turn into an HTTP 400 with the
-exception's own message, e.g. `"Invalid GeoJSON: 'features'"`.
+feature with no `parcelid` — raises a Python exception that every endpoint
+(`/resolve`, `/validate`, `/measure`, `/project`, `/convert`) turns into an
+HTTP 400 with the exception's own message, e.g.
+`"Invalid GeoJSON: 'features'"`.
 
 Coordinates are treated as planar `(x, y)` values throughout. There is no
 coordinate-reference-system handling: geographic latitude/longitude needs to
@@ -391,6 +401,27 @@ An unrecognized CRS string returns HTTP `400`:
 }
 ```
 
+```text
+POST /convert?crs=EPSG:4326
+```
+
+Body: a GeoJSON `FeatureCollection`. `crs` is optional — when given, it's
+written into a `.prj` file so GIS software that reads the output knows what
+the coordinates mean; `/convert` never reprojects (that's `/project`'s job).
+Returns a `application/zip` binary response — not JSON — containing
+`parcels.shp`, `parcels.shx`, `parcels.dbf`, and `parcels.prj` if a `crs`
+was given, one `Feature` per shapefile record with its `parcelid` in a
+`parcelid` field:
+
+```text
+Content-Type: application/zip
+Content-Disposition: attachment; filename=parcels.zip
+```
+
+An unrecognized `crs` string returns the same `Invalid CRS: ...` HTTP `400`
+shape as `/project`; malformed GeoJSON returns the same `Invalid GeoJSON:
+...` shape as every other endpoint.
+
 Direct function usage, without going through the API at all:
 
 ```python
@@ -416,15 +447,20 @@ from parcel_resolver.projection import reproject_coordinates
 
 reproject_coordinates([(-122.4194, 37.7749)], "EPSG:4326", "EPSG:3857")
 # [(-13627665.27, 4547675.35)]
+
+from parcel_resolver.conversion import parcels_to_shapefile_zip
+
+archive_bytes = parcels_to_shapefile_zip({"P001": parcel_a})
+# raw bytes of a .zip containing parcels.shp/.shx/.dbf
 ```
 
 ## Frontend
 
-Four tools are wired up end to end, and all of them share the same paste /
-upload / **Load sample** interaction pattern deliberately. Invalid JSON is
-caught client-side before it's sent; a non-2xx response or an unreachable
-API surfaces the server's own error message inline instead of a stack
-trace.
+All five tools are wired up end to end, and all of them share the same
+paste / upload / **Load sample** interaction pattern deliberately. Invalid
+JSON is caught client-side before it's sent; a non-2xx response or an
+unreachable API surfaces the server's own error message inline instead of
+a stack trace.
 
 - `frontend/src/app/tools/overlap/page.tsx` submits to `POST {API_URL}/resolve`
   and renders a table of overlapping pairs — parcel A, parcel B, overlap
@@ -445,10 +481,11 @@ trace.
   parcel's reprojected coordinate ring as raw JSON in a scrollable
   monospace block, since a table doesn't suit an arbitrary-length list of
   coordinate pairs the way it suits one value per parcel.
-
-Format conversion is the one entry left in the sidebar without a page
-behind it — a `planned`-status placeholder wired through `dashboard.json`
-that shows a "Soon" badge.
+- `frontend/src/app/tools/conversion/page.tsx` adds an optional CRS field
+  (for the output `.prj`), submits to `POST {API_URL}/convert`, and — since
+  this is the one endpoint that doesn't return JSON — reads the response as
+  a `Blob`, builds an object URL, and clicks a synthetic `<a download>` to
+  save `parcels.zip`, rather than rendering a results table.
 
 ## Repository Layout
 
@@ -457,9 +494,11 @@ parcel-resolver/
 ├── backend/
 │   ├── parcel_resolver/
 │   │   ├── api/
-│   │   │   └── resolve.py       # FastAPI app, CORS config, POST /resolve + /validate + /measure + /project
+│   │   │   └── resolve.py       # FastAPI app, CORS config, all five POST endpoints
 │   │   ├── cadastre/
 │   │   │   └── __init__.py      # parcel geometry + area validation
+│   │   ├── conversion/
+│   │   │   └── __init__.py      # GeoJSON -> zipped Shapefile
 │   │   ├── io/
 │   │   │   └── geojson.py       # GeoJSON Polygon + FeatureCollection parsing
 │   │   ├── measurement/
@@ -479,6 +518,7 @@ parcel-resolver/
 │   │   │   └── test_severity.py
 │   │   ├── test_api.py
 │   │   ├── test_cadastre.py
+│   │   ├── test_conversion.py
 │   │   ├── test_measurement.py
 │   │   └── test_projection.py
 │   └── requirements.txt
@@ -493,8 +533,10 @@ parcel-resolver/
     │   │       │   └── page.tsx     # geometry validation tool
     │   │       ├── measurement/
     │   │       │   └── page.tsx     # area + perimeter tool
-    │   │       └── projection/
-    │   │           └── page.tsx     # CRS reprojection tool
+    │   │       ├── projection/
+    │   │       │   └── page.tsx     # CRS reprojection tool
+    │   │       └── conversion/
+    │   │           └── page.tsx     # GeoJSON -> Shapefile download
     │   ├── components/shell/
     │   │   ├── sidebar.tsx
     │   │   └── nav-link.tsx
@@ -512,21 +554,25 @@ pairs), spatial-index-driven discovery across the full sample fixture set,
 percentage-based severity classification, area/perimeter measurement,
 coordinate reprojection (an identity transform, a known WGS84 → Web
 Mercator conversion checked against pyproj's own output, and a
-shape-preservation sanity check), and `/resolve`, `/validate`, `/measure`,
-and `/project`'s success and HTTP-400 paths. Run it with `python -m pytest`
-from `backend/`.
+shape-preservation sanity check), Shapefile packaging (archive contents,
+optional `.prj`, and a round trip through `pyshp`'s own reader to confirm
+geometry and the `parcelid` field survive intact), and all five endpoints'
+success and HTTP-400 paths. Run it with `python -m pytest` from `backend/`.
 
-All four frontend tools were verified end-to-end in a real browser against
+All five frontend tools were verified end-to-end in a real browser against
 a running backend, not just checked for compiling: the overlap tool's sample
 `FeatureCollection` returns the expected pair (`P001`/`P002`, 4 square
 units, 4.00%, `tolerance`); the validation tool's sample returns one valid
 parcel and one flagged `self intersecting, suspicious area` parcel; the
 measurement tool's sample returns `P001` at area `100`, perimeter `40`; the
 projection tool's sample reprojects `P001` from `EPSG:4326` to `EPSG:3857`
-with coordinates matching a direct API call byte-for-byte, and a deliberately
-invalid CRS string surfaces the backend's `Invalid CRS: ...` message inline.
-All four rendered correctly with no console errors, and the sidebar's status
-badges were confirmed to match.
+with coordinates matching a direct API call byte-for-byte; the conversion
+tool's sample triggers a real `parcels.zip` blob download confirmed against
+the network log (`200 OK`, `application/zip`). Every tool's error path was
+also checked — an invalid CRS string surfaces the backend's `Invalid CRS:
+...` message inline on both the projection and conversion tools. All five
+rendered correctly with no console errors, and the sidebar shows no
+remaining "Soon" badges.
 
 ## Known Limitations & Rough Edges
 
@@ -555,6 +601,11 @@ badges were confirmed to match.
   can resolve without validating that it's an appropriate choice for the
   input data (e.g. nothing stops reprojecting already-planar local survey
   coordinates as if they were WGS84 lat/lon).
+- `/convert` only goes one direction (GeoJSON in, Shapefile out) and only
+  supports one target format. Reading a Shapefile back into GeoJSON isn't
+  implemented, and there's no CSV, KML, or GeoPackage output either.
+- Every shapefile record carries exactly one attribute, `parcelid` — no
+  other GeoJSON `properties` fields survive the conversion.
 
 ## Contributing
 
@@ -584,18 +635,20 @@ it — see [A Note on How This Was Tested](#a-note-on-how-this-was-tested).
 - [x] Geometry validation API (`POST /validate`) and dashboard tool
 - [x] Area/perimeter measurement API (`POST /measure`) and dashboard tool
 - [x] Coordinate reprojection API (`POST /project`) and dashboard tool
+- [x] GeoJSON-to-Shapefile conversion API (`POST /convert`) and dashboard tool
 - [ ] Distance measurement between parcels (measurement tool is area/perimeter-only today)
 - [ ] Recompute area/perimeter after reprojection, not just coordinates
+- [ ] Shapefile-to-GeoJSON conversion (the reverse direction; `/convert` is one-way today)
+- [ ] Preserve arbitrary GeoJSON `properties` fields through conversion, not just `parcelid`
+- [ ] Additional conversion targets (CSV, KML, GeoPackage)
 - [ ] Repair guidance for flagged geometry, not just a flag name
 - [ ] Configurable CORS origins (currently hardcoded to `localhost:3000`)
 - [ ] Configurable overlap and suspicious-area thresholds
 - [ ] Reading GeoJSON directly from files, not just request bodies
 - [ ] MultiPolygon and interior-hole (donut parcel) support
-- [ ] Shapefile input/output
 - [ ] Persistent spatial storage
 - [ ] Command-line batch processing
 - [ ] Benchmarks on larger datasets
-- [ ] Format-conversion tool (the one placeholder left in the sidebar)
 - [ ] Real dashboard home page (currently the default `create-next-app`
       scaffold)
 

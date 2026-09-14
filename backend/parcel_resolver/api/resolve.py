@@ -1,9 +1,12 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from pyproj import CRS
 from pyproj.exceptions import CRSError
 from shapely.geometry import Polygon
 
 from parcel_resolver.cadastre import validate_parcel
+from parcel_resolver.conversion import parcels_to_shapefile_zip
 from parcel_resolver.io.geojson import parse_feature_collection
 from parcel_resolver.measurement import measure_parcel
 from parcel_resolver.projection import reproject_coordinates
@@ -149,3 +152,47 @@ async def project_parcels(
         "target_crs": target_crs,
         "parcels": results,
     }
+
+
+@app.post("/convert")
+async def convert_parcels(
+    feature_collection: dict,
+    crs: str | None = Query(
+        None, description='Optional CRS for the .prj file, e.g. "EPSG:4326"'
+    ),
+):
+    """
+    Endpoint to convert a GeoJSON FeatureCollection into a zipped ESRI
+    Shapefile.
+
+    Args:
+        feature_collection (dict): A GeoJSON FeatureCollection object.
+        crs (str | None): An optional CRS to record in the shapefile's
+            .prj file. Doesn't reproject anything -- see /project for
+            that."""
+
+    try:
+        parcels = parse_feature_collection(feature_collection)
+    except (ValueError, KeyError, TypeError, IndexError) as error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid GeoJSON: {error}",
+        ) from error
+
+    crs_wkt = None
+    if crs:
+        try:
+            crs_wkt = CRS.from_user_input(crs).to_wkt()
+        except CRSError as error:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid CRS: {error}",
+            ) from error
+
+    archive = parcels_to_shapefile_zip(parcels, crs_wkt)
+
+    return Response(
+        content=archive,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=parcels.zip"},
+    )
