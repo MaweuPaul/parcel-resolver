@@ -120,3 +120,42 @@ def test_validate_rejects_feature_collection_without_features():
     assert response.json() == {
         "detail": "Invalid GeoJSON: 'features'",
     }
+
+
+def test_measure_returns_area_and_perimeter_per_parcel():
+    feature_collection = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"parcelid": "P001"},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]
+                    ],
+                },
+            },
+        ],
+    }
+
+    response = client.post("/measure", json=feature_collection)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "parcels": [
+            {"parcel_id": "P001", "area": 100.0, "perimeter": 40.0},
+        ]
+    }
+
+
+def test_measure_rejects_feature_collection_without_features():
+    response = client.post(
+        "/measure",
+        json={"type": "FeatureCollection"},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "Invalid GeoJSON: 'features'",
+    }

@@ -41,7 +41,7 @@
                     "description": "Measure parcel areas, boundaries, and distances.",
                     "href": "/tools/measurement",
                     "icon": "ruler",
-                    "status": "planned"
+                    "status": "available"
                 }
             ]
         },
@@ -77,12 +77,12 @@
             {
                 "id": "available-tools",
                 "label": "Available tools",
-                "value": 2
+                "value": 3
             },
             {
                 "id": "planned-tools",
                 "label": "Planned tools",
-                "value": 3
+                "value": 2
             },
             {
                 "id": "analyses",

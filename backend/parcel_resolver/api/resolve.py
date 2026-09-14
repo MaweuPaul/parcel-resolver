@@ -4,6 +4,7 @@ from shapely.geometry import Polygon
 
 from parcel_resolver.cadastre import validate_parcel
 from parcel_resolver.io.geojson import parse_feature_collection
+from parcel_resolver.measurement import measure_parcel
 from parcel_resolver.resolver.index import find_overlaps
 from parcel_resolver.resolver.severity import classify_severity
 
@@ -73,6 +74,31 @@ async def validate_parcels(feature_collection: dict):
 
     results = [
         {"parcel_id": parcel_id, **validate_parcel(coords)}
+        for parcel_id, coords in parcels.items()
+    ]
+
+    return {"parcels": results}
+
+
+@app.post("/measure")
+async def measure_parcels(feature_collection: dict):
+    """
+    Endpoint to measure parcel area and perimeter from a GeoJSON
+    FeatureCollection.
+
+    Args:
+        feature_collection (dict): A GeoJSON FeatureCollection object."""
+
+    try:
+        parcels = parse_feature_collection(feature_collection)
+    except (ValueError, KeyError, TypeError, IndexError) as error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid GeoJSON: {error}",
+        ) from error
+
+    results = [
+        {"parcel_id": parcel_id, **measure_parcel(coords)}
         for parcel_id, coords in parcels.items()
     ]
 

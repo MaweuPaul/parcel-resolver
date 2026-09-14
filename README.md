@@ -41,9 +41,10 @@ overlap represents.
 
 The backend is a FastAPI service built on [Shapely](https://shapely.readthedocs.io/)
 for the geometry work. The frontend is a Next.js dashboard shell — a sidebar
-of analysis tools, two of which ("Parcel overlap detection" and "Geometry
-validation") are fully wired up to the API; the rest are placeholders for
-tools that don't exist yet (see [Roadmap](#roadmap--to-be-done)).
+of analysis tools, three of which ("Parcel overlap detection", "Geometry
+validation", and "Area and distance") are fully wired up to the API; the
+rest are placeholders for tools that don't exist yet (see
+[Roadmap](#roadmap--to-be-done)).
 
 ## Why It's Built This Way
 
@@ -107,11 +108,11 @@ block at the bottom of `geojson.py`.
 **A dashboard shell built for more than one tool.** The sidebar's navigation
 config (`frontend/src/config/dashboard.json`) lists every analysis tool with
 a status of `available` or `planned`; the shell renders a "Soon" badge for
-anything still planned and otherwise just links to it. Geometry validation
-went from `planned` to `available` without touching `sidebar.tsx` at all —
-adding the next tool means adding a page under `app/tools/<name>` and
-flipping one entry in that config, not restructuring navigation around it.
-Measurement, projection, and format conversion are still `planned`.
+anything still planned and otherwise just links to it. Validation and
+measurement both went from `planned` to `available` without touching
+`sidebar.tsx` at all — adding the next tool means adding a page under
+`app/tools/<name>` and flipping one entry in that config, not restructuring
+navigation around it. Projection and format conversion are still `planned`.
 
 ## Running It
 
@@ -139,8 +140,8 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` and go to **Overlap** or **Validation** in the
-sidebar. The
+Open `http://localhost:3000` and go to **Overlap**, **Validation**, or
+**Measurement** in the sidebar. The
 backend allows cross-origin requests from `http://localhost:3000` only (see
 [Known Limitations](#known-limitations--rough-edges)); if the API is hosted
 somewhere else, point the frontend at it with:
@@ -175,9 +176,9 @@ Every feature in that collection needs:
   results, in skip messages, in the frontend table)
 
 Anything short of that — a missing `features` key, a non-Polygon geometry, a
-feature with no `parcelid` — raises a Python exception that `/resolve` and
-`/validate` both turn into an HTTP 400 with the exception's own message,
-e.g. `"Invalid GeoJSON: 'features'"`.
+feature with no `parcelid` — raises a Python exception that `/resolve`,
+`/validate`, and `/measure` all turn into an HTTP 400 with the exception's
+own message, e.g. `"Invalid GeoJSON: 'features'"`.
 
 Coordinates are treated as planar `(x, y)` values throughout. There is no
 coordinate-reference-system handling: geographic latitude/longitude needs to
@@ -324,6 +325,27 @@ A parcel can carry more than one flag at once (a self-intersecting polygon
 often also reports a suspicious, near-zero area, as above). Malformed
 GeoJSON returns the same HTTP `400` shape as `/resolve`.
 
+```text
+POST /measure
+```
+
+Body: a GeoJSON `FeatureCollection`, same shape as `/resolve` and
+`/validate`. Returns each parcel's own area and perimeter — no comparison
+between parcels, and no distance measurement between them yet (see
+[Known Limitations](#known-limitations--rough-edges)):
+
+```json
+{
+  "parcels": [
+    {
+      "parcel_id": "P001",
+      "area": 100.0,
+      "perimeter": 40.0
+    }
+  ]
+}
+```
+
 Direct function usage, without going through the API at all:
 
 ```python
@@ -339,16 +361,21 @@ check_overlap(parcel_a, parcel_b)
 
 validate_parcel(parcel_a)
 # {"is_valid": True, "area": 100.0, "flags": []}
+
+from parcel_resolver.measurement import measure_parcel
+
+measure_parcel(parcel_a)
+# {"area": 100.0, "perimeter": 40.0}
 ```
 
 ## Frontend
 
-Two tools are wired up end to end, and both share the same interaction
-pattern deliberately — paste a GeoJSON `FeatureCollection` directly, upload
-a `.json`/`.geojson` file, or click **Load sample** for a ready-made example.
-Invalid JSON is caught client-side before it's sent; a non-2xx response or
-an unreachable API surfaces the server's own error message inline instead of
-a stack trace.
+Three tools are wired up end to end, and all three share the same
+interaction pattern deliberately — paste a GeoJSON `FeatureCollection`
+directly, upload a `.json`/`.geojson` file, or click **Load sample** for a
+ready-made example. Invalid JSON is caught client-side before it's sent; a
+non-2xx response or an unreachable API surfaces the server's own error
+message inline instead of a stack trace.
 
 - `frontend/src/app/tools/overlap/page.tsx` submits to `POST {API_URL}/resolve`
   and renders a table of overlapping pairs — parcel A, parcel B, overlap
@@ -358,11 +385,13 @@ a stack trace.
   `POST {API_URL}/validate` and renders one row per parcel — parcel ID, a
   valid/invalid badge, area, and any flags joined together (or an em dash
   when there are none).
+- `frontend/src/app/tools/measurement/page.tsx` submits to
+  `POST {API_URL}/measure` and renders one row per parcel — parcel ID, area,
+  and perimeter.
 
-Every other entry in the sidebar (**Measurement**, **Projection**,
-**Conversion**) is a `planned`-status placeholder wired through
-`dashboard.json` — the link exists and shows a "Soon" badge, but there's no
-page behind it yet.
+Every other entry in the sidebar (**Projection**, **Conversion**) is a
+`planned`-status placeholder wired through `dashboard.json` — the link
+exists and shows a "Soon" badge, but there's no page behind it yet.
 
 ## Repository Layout
 
@@ -371,11 +400,13 @@ parcel-resolver/
 ├── backend/
 │   ├── parcel_resolver/
 │   │   ├── api/
-│   │   │   └── resolve.py       # FastAPI app, CORS config, POST /resolve + /validate
+│   │   │   └── resolve.py       # FastAPI app, CORS config, POST /resolve + /validate + /measure
 │   │   ├── cadastre/
 │   │   │   └── __init__.py      # parcel geometry + area validation
 │   │   ├── io/
 │   │   │   └── geojson.py       # GeoJSON Polygon + FeatureCollection parsing
+│   │   ├── measurement/
+│   │   │   └── __init__.py      # per-parcel area + perimeter
 │   │   └── resolver/
 │   │       ├── overlap.py       # exact two-parcel overlap check
 │   │       ├── index.py         # validation + spatial index + overlap discovery
@@ -388,7 +419,8 @@ parcel-resolver/
 │   │   │   ├── test_overlap.py
 │   │   │   └── test_severity.py
 │   │   ├── test_api.py
-│   │   └── test_cadastre.py
+│   │   ├── test_cadastre.py
+│   │   └── test_measurement.py
 │   └── requirements.txt
 └── frontend/
     ├── src/
@@ -397,8 +429,10 @@ parcel-resolver/
     │   │   └── tools/
     │   │       ├── overlap/
     │   │       │   └── page.tsx     # overlap detection tool
-    │   │       └── validation/
-    │   │           └── page.tsx     # geometry validation tool
+    │   │       ├── validation/
+    │   │       │   └── page.tsx     # geometry validation tool
+    │   │       └── measurement/
+    │   │           └── page.tsx     # area + perimeter tool
     │   ├── components/shell/
     │   │   ├── sidebar.tsx
     │   │   └── nav-link.tsx
@@ -413,16 +447,18 @@ The backend has an automated `pytest` suite covering cadastre validation
 (valid parcels, self-intersecting geometry, suspicious tiny/huge areas),
 overlap detection (overlapping, adjacent-but-not-overlapping, disjoint
 pairs), spatial-index-driven discovery across the full sample fixture set,
-percentage-based severity classification, and both `/resolve` and
-`/validate`'s success and HTTP-400 paths. Run it with `python -m pytest`
-from `backend/`.
+percentage-based severity classification, area/perimeter measurement, and
+`/resolve`, `/validate`, and `/measure`'s success and HTTP-400 paths. Run it
+with `python -m pytest` from `backend/`.
 
-Both frontend tools were verified end-to-end in a real browser against a
-running backend, not just checked for compiling: the overlap tool's sample
+All three frontend tools were verified end-to-end in a real browser against
+a running backend, not just checked for compiling: the overlap tool's sample
 `FeatureCollection` returns the expected pair (`P001`/`P002`, 4 square
 units, 4.00%, `tolerance`); the validation tool's sample returns one valid
-parcel and one flagged `self intersecting, suspicious area` parcel, both
-rendered correctly with no console errors.
+parcel and one flagged `self intersecting, suspicious area` parcel; the
+measurement tool's sample returns `P001` at area `100`, perimeter `40`. All
+three rendered correctly with no console errors, and the sidebar's status
+badges were confirmed to match.
 
 ## Known Limitations & Rough Edges
 
@@ -443,6 +479,9 @@ rendered correctly with no console errors.
   suspicious area, but gives no guidance on how to fix the geometry.
 - There's no persistence layer: results exist only for the lifetime of one
   request/response. Re-running an analysis means re-sending the same data.
+- `/measure` reports each parcel's own area and perimeter only — there's no
+  distance measurement *between* parcels yet, even though the sidebar's
+  tool description ("Area and distance") implies it.
 
 ## Contributing
 
@@ -470,6 +509,8 @@ it — see [A Note on How This Was Tested](#a-note-on-how-this-was-tested).
 - [x] Reconcile the duplicate absolute-area severity logic in `overlap.py`
 - [x] Fix the `httpx2` → `httpx` typo in `requirements.txt`
 - [x] Geometry validation API (`POST /validate`) and dashboard tool
+- [x] Area/perimeter measurement API (`POST /measure`) and dashboard tool
+- [ ] Distance measurement between parcels (measurement tool is area/perimeter-only today)
 - [ ] Repair guidance for flagged geometry, not just a flag name
 - [ ] Configurable CORS origins (currently hardcoded to `localhost:3000`)
 - [ ] Configurable overlap and suspicious-area thresholds
@@ -479,8 +520,8 @@ it — see [A Note on How This Was Tested](#a-note-on-how-this-was-tested).
 - [ ] Persistent spatial storage
 - [ ] Command-line batch processing
 - [ ] Benchmarks on larger datasets
-- [ ] Measurement, projection, and format-conversion tools (currently
-      placeholders in the sidebar)
+- [ ] Projection and format-conversion tools (currently placeholders in the
+      sidebar)
 - [ ] Real dashboard home page (currently the default `create-next-app`
       scaffold)
 
